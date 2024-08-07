@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color a Sonido App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #video {
+            width: 640px;
+            height: 480px;
+            background-color: #000;
+        }
+        #colorDisplay {
+            width: 100px;
+            height: 100px;
+            margin: 20px;
+            border: 2px solid #000;
+        }
+        #switchCamera {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Color a Sonido App</h1>
+    <video id="video" autoplay></video>
+    <div id="colorDisplay"></div>
+    <p id="colorName"></p>
+    <button id="switchCamera">Cambiar Cámara</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const colorDisplay = document.getElementById('colorDisplay');
+        const colorName = document.getElementById('colorName');
+        const switchCameraButton = document.getElementById('switchCamera');
+        
+        const colorNotes = {
+            'red': 'C4',
+            'orange': 'D4',
+            'yellow': 'E4',
+            'lime': 'F4',
+            'green': 'G4',
+            'light blue': 'A4',
+            'blue': 'B4',
+            'purple': 'C5'
+        };
+
+        const synth = new Tone.Synth().toDestination();
+        let currentStream = null;
+        let usingFrontCamera = true;
+
+        async function setupCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            const constraints = {
+                video: {
+                    facingMode: usingFrontCamera ? 'user' : 'environment'
+                }
+            };
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                currentStream = stream;
+            } catch (error) {
+                console.error('Error accessing the camera', error);
+            }
+        }
+
+        function getDominantColor(imageData) {
+            const colorCounts = {};
+            let maxCount = 0;
+            let dominantColor = '#000000';
+
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                const rgb = `rgb(${imageData.data[i]}, ${imageData.data[i + 1]}, ${imageData.data[i + 2]})`;
+                colorCounts[rgb] = (colorCounts[rgb] || 0) + 1;
+
+                if (colorCounts[rgb] > maxCount) {
+                    maxCount = colorCounts[rgb];
+                    dominantColor = rgb;
+                }
+            }
+
+            return dominantColor;
+        }
+
+        function getNearestColorName(rgbColor) {
+            const colorHexes = {
+                'red': 'rgb(255, 0, 0)',
+                'orange': 'rgb(255, 165, 0)',
+                'yellow': 'rgb(255, 255, 0)',
+                'lime': 'rgb(0, 255, 0)',
+                'green': 'rgb(0, 128, 0)',
+                'light blue': 'rgb(173, 216, 230)',
+                'blue': 'rgb(0, 0, 255)',
+                'purple': 'rgb(128, 0, 128)'
+            };
+
+            let nearestColor = 'red';
+            let minDistance = Infinity;
+
+            for (const [colorName, colorRgb] of Object.entries(colorHexes)) {
+                const distance = getDistance(rgbColor, colorRgb);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestColor = colorName;
+                }
+            }
+
+            return nearestColor;
+        }
+
+        function getDistance(color1, color2) {
+            const [r1, g1, b1] = color1.match(/\d+/g).map(Number);
+            const [r2, g2, b2] = color2.match(/\d+/g).map(Number);
+
+            return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+        }
+
+        function processVideo() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 160;
+            canvas.height = 120;
+
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const dominantColor = getDominantColor(imageData);
+            const nearestColor = getNearestColorName(dominantColor);
+
+            colorDisplay.style.backgroundColor = dominantColor;
+            colorName.textContent = `Color detectado: ${nearestColor}`;
+
+            if (colorNotes[nearestColor]) {
+                synth.triggerAttackRelease(colorNotes[nearestColor], '8n');
+            }
+
+            requestAnimationFrame(processVideo);
+        }
+
+        switchCameraButton.addEventListener('click', () => {
+            usingFrontCamera = !usingFrontCamera;
+            setupCamera();
+        });
+
+        setupCamera().then(() => {
+            video.onloadedmetadata = () => {
+                processVideo();
+            };
+        });
+    </script>
+</body>
+</html>
